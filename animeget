@@ -75,7 +75,7 @@ uri = URI(ARGV[0])
 res = Net::HTTP.get(uri)
 url = res.scan(regexp).first
 if play
-  exec "mpvx11 '#{url[0]}'"
+  exec "mpv '#{url[0]}'"
 elsif info
   puts url[0]
 elsif kodi
