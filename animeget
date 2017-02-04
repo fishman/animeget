@@ -1,0 +1,94 @@
+#!/usr/bin/env ruby
+$stderr.sync = true
+
+require "net/http"
+require 'uri'
+require 'optparse'
+require 'json'
+
+JSON_RPC_VERSION='2.0'
+options = {:info => nil, :kodi => nil}
+
+# regexp = /(^$)|(^(http|https):\/\/[a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,5}(([0-9]{1,5})?\/.*)?$)/ix
+# regexp = /(https?:\/\/embed.vidwootcom([-\w\.]+)+(:\d+)?(\/([\w\/_\.]*(\?\S+)?)?)?)/
+regexp = /"(https?:\/\/[^"]*(?:videonest|videoweed|vidwoot|mp4upload|vidbull|yourupload).*?)"/
+
+# default options
+info = false
+kodi = false
+play = false
+
+ARGV.options do |opts|
+	opts.banner = "Usage: animeget [options] url"
+  opts.on("-i", "--info")              { info = true }
+  opts.on("-k", "--kodi")              { kodi = true }
+  opts.on("-p", "--play")              { play = true }
+  opts.on_tail("-h", "--help")         { puts opts; exit}
+  opts.parse!
+  unless ARGV[0]
+    puts opts
+    exit
+  end
+end
+
+class Kodi
+  # @@kodiurl  = 'libreelec.local'
+  @@kodiurl  = '192.168.1.158'
+  @@kodiport = 8080
+
+  def send(method, params = nil)
+    payload = {
+      id: '1',
+      jsonrpc: '2.0',
+      method: method,
+    }
+
+    payload[:params] = params if params
+
+    uri = URI("http://#{@@kodiurl}:#{@@kodiport}/jsonrpc")
+    req = Net::HTTP::Post.new(uri.path, intiheader = {'Content-Type' => 'application/json'})
+    req.body = payload.to_json
+    res = Net::HTTP.start(uri.hostname, uri.port) do |http|
+      http.request(req)
+    end
+    res.body
+  end
+
+  def play(url)
+    method = 'Player.Open'
+    params = {
+      item: {
+        file: url
+      }
+    }
+    send(method, params)
+  end
+
+  def playing
+    method = "Player.GetActivePlayers"
+    res = send method
+    puts res
+  end
+end
+
+uri = URI(ARGV[0])
+res = Net::HTTP.get(uri)
+url = res.scan(regexp).first
+if play
+  exec "mpvx11 '#{url[0]}'"
+elsif info
+  puts url[0]
+elsif kodi
+  play_url=`youtube-dl -g '#{url[0]}'`
+  kodi = Kodi.new
+  kodi.play play_url.strip!
+else
+  if ENV['DISPLAY']
+    `dunstify 'starting anime download'`
+  end
+  title=URI.decode("#{ARGV[0]}".split('/')[3])
+  exec "mkdir -p ~/Movies/Anime ; cd ~/Movies/Anime ;  youtube-dl -o '~/Movies/Anime/#{title}-%(id)s.%(ext)s' '#{url[0]}'"
+  if ENV['DISPLAY']
+    `dunstify 'download completed... i think'`
+  end
+end
